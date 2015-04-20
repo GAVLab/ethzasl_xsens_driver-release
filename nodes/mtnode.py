@@ -18,6 +18,14 @@ from tf.transformations import quaternion_from_matrix, quaternion_from_euler, id
 
 import numpy
 
+
+def time_getter():
+  """override the system time.time() in the driver so that we have ros time 
+  at the earliest possible jucture
+  """
+  return rospy.Time.to_sec(rospy.Time.now())
+
+
 def get_param(name, default):
 	try:
 		v = rospy.get_param(name)
@@ -57,6 +65,7 @@ class XSensDriver(object):
 
 		rospy.loginfo("MT node interface: %s at %d bd."%(device, baudrate))
 		self.mt = mtdevice.MTDevice(device, baudrate)
+    self.mt.time = time_getter
 
 		self.frame_id = get_param('~frame_id', '/base_imu')
 
@@ -131,10 +140,10 @@ class XSensDriver(object):
 				pass
 
 		# get data
-		data = self.mt.read_measurement()
+		data, read_time = self.mt.read_measurement()
 		# common header
 		h = Header()
-		h.stamp = rospy.Time.now()
+		h.stamp = rospy.Time.from_sec(read_time)
 		h.frame_id = self.frame_id
 
 		# get data (None if not present)

@@ -40,6 +40,9 @@ class MTDevice(object):
 		if config_mode:
 			self.GoToConfig()
 
+    # want a default time getter
+    self.time = time.time
+
 	############################################################
 	# Low-level communication
 	############################################################
@@ -55,8 +58,8 @@ class MTDevice(object):
 		packet = [0xFA, 0xFF, mid] + lendat + list(data)
 		packet.append(0xFF&(-(sum(packet[1:]))))
 		msg = struct.pack('%dB'%len(packet), *packet)
-		start = time.time()
-		while (time.time()-start)<self.timeout and self.device.read():
+		start = self.time()
+		while (self.time()-start)<self.timeout and self.device.read():
 			#print ".",
 			pass
 		self.device.write(msg)
@@ -69,12 +72,12 @@ class MTDevice(object):
 	def read_data_msg(self, buf=bytearray()):
 		"""Low-level MTData receiving function.
 		Take advantage of known message length."""
-		start = time.time()
+		start = self.time()
 		if self.length>254:
 			totlength = 7 + self.length
 		else:
 			totlength = 5 + self.length
-		while (time.time()-start)<self.timeout:
+		while (self.time()-start)<self.timeout:
 			while len(buf)<totlength:
 				buf.extend(self.device.read(totlength-len(buf)))
 			preamble_ind = buf.find(self.header)
@@ -104,18 +107,18 @@ class MTDevice(object):
 	## Low-level message receiving function.
 	def read_msg(self):
 		"""Low-level message receiving function."""
-		start = time.time()
-		while (time.time()-start)<self.timeout:
-			new_start = time.time()
+		start = self.time()
+		while (self.time()-start)<self.timeout:
+			new_start = self.time()
 
 			# Makes sure the buffer has 'size' bytes.
 			def waitfor(size=1):
 				while self.device.inWaiting() < size:
-					if time.time()-new_start >= self.timeout:
+					if self.time()-new_start >= self.timeout:
 						raise MTException("timeout waiting for message.")
 
 			c = self.device.read()
-			while (not c) and ((time.time()-new_start)<self.timeout):
+			while (not c) and ((self.time()-new_start)<self.timeout):
 				c = self.device.read()
 			if not c:
 				raise MTException("timeout waiting for message.")
@@ -135,7 +138,7 @@ class MTDevice(object):
 
 			waitfor(length+1)
 			buf = self.device.read(length+1)
-			while (len(buf)<length+1) and ((time.time()-start)<self.timeout):
+			while (len(buf)<length+1) and ((self.time()-start)<self.timeout):
 				buf+= self.device.read(length+1-len(buf))
 			if (len(buf)<length+1):
 				continue
@@ -151,7 +154,7 @@ class MTDevice(object):
 				sys.stderr.write("invalid checksum; discarding data and "\
 						"waiting for next message.\n")
 				continue
-			return (mid, buf[:-1])
+			return (mid, buf[:-1], new_start)
 		else:
 			raise MTException("could not find message.")
 
@@ -393,11 +396,11 @@ class MTDevice(object):
 	def read_measurement(self, mode=None, settings=None):
 		# getting data
 		#data = self.read_data_msg()
-		mid, data = self.read_msg()
+		mid, data, read_time = self.read_msg()
 		if mid==MID.MTData:
-			return self.parse_MTData(data, mode, settings)
+			return self.parse_MTData(data, mode, settings), read_time
 		elif mid==MID.MTData2:
-			return self.parse_MTData2(data)
+			return self.parse_MTData2(data), read_time
 		else:
 			raise MTException("unknown data message: mid=0x%02X (%s)."%	(mid, getMIDName(mid)))
 
