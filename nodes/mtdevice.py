@@ -16,7 +16,7 @@ verbose = False
 class MTDevice(object):
 	"""XSens MT device communication object."""
 
-	def __init__(self, port, baudrate=115200, timeout=0.001, autoconf=True,
+	def __init__(self, port, baudrate=115200, timeout=0.01, autoconf=False,
 			config_mode=False):
 		"""Open device."""
 		## serial interface to the device
@@ -28,20 +28,25 @@ class MTDevice(object):
 		self.timeout = 100*timeout
 		if autoconf:
 			self.auto_config()
+			print "MODE:"
+			print self.mode
+			print "SETTINGS:"
+			print self.settings
+			print "LENGTH:"
+			print self.length
+			print "HEADER:"
+			print self.header
 		else:
 			## mode parameter of the IMU
-			self.mode = None
+			self.mode = 2055
 			## settings parameter of the IMU
-			self.settings = None
+			self.settings = 1
 			## length of the MTData message
-			self.length = None
+			self.length = 59
 			## header of the MTData message
-			self.header = None
+			self.header = '\xFA\xFF\x32'+chr(self.length)
 		if config_mode:
 			self.GoToConfig()
-
-    # want a default time getter
-    self.time = time.time
 
 	############################################################
 	# Low-level communication
@@ -58,8 +63,8 @@ class MTDevice(object):
 		packet = [0xFA, 0xFF, mid] + lendat + list(data)
 		packet.append(0xFF&(-(sum(packet[1:]))))
 		msg = struct.pack('%dB'%len(packet), *packet)
-		start = self.time()
-		while (self.time()-start)<self.timeout and self.device.read():
+		start = time.time()
+		while (time.time()-start)<self.timeout and self.device.read():
 			#print ".",
 			pass
 		self.device.write(msg)
@@ -72,12 +77,12 @@ class MTDevice(object):
 	def read_data_msg(self, buf=bytearray()):
 		"""Low-level MTData receiving function.
 		Take advantage of known message length."""
-		start = self.time()
+		start = time.time()
 		if self.length>254:
 			totlength = 7 + self.length
 		else:
 			totlength = 5 + self.length
-		while (self.time()-start)<self.timeout:
+		while (time.time()-start)<self.timeout:
 			while len(buf)<totlength:
 				buf.extend(self.device.read(totlength-len(buf)))
 			preamble_ind = buf.find(self.header)
@@ -100,25 +105,27 @@ class MTDevice(object):
 				continue
 			data = str(buf[-self.length-1:-1])
 			del buf[:]
+			# print data
 			return data
 		else:
+			# print time.time()-start
 			raise MTException("could not find MTData message.")
 
 	## Low-level message receiving function.
 	def read_msg(self):
 		"""Low-level message receiving function."""
-		start = self.time()
-		while (self.time()-start)<self.timeout:
-			new_start = self.time()
+		start = time.time()
+		while (time.time()-start)<self.timeout:
+			new_start = time.time()
 
 			# Makes sure the buffer has 'size' bytes.
 			def waitfor(size=1):
 				while self.device.inWaiting() < size:
-					if self.time()-new_start >= self.timeout:
+					if time.time()-new_start >= self.timeout:
 						raise MTException("timeout waiting for message.")
 
 			c = self.device.read()
-			while (not c) and ((self.time()-new_start)<self.timeout):
+			while (not c) and ((time.time()-new_start)<self.timeout):
 				c = self.device.read()
 			if not c:
 				raise MTException("timeout waiting for message.")
@@ -138,7 +145,7 @@ class MTDevice(object):
 
 			waitfor(length+1)
 			buf = self.device.read(length+1)
-			while (len(buf)<length+1) and ((self.time()-start)<self.timeout):
+			while (len(buf)<length+1) and ((time.time()-start)<self.timeout):
 				buf+= self.device.read(length+1-len(buf))
 			if (len(buf)<length+1):
 				continue
@@ -154,7 +161,7 @@ class MTDevice(object):
 				sys.stderr.write("invalid checksum; discarding data and "\
 						"waiting for next message.\n")
 				continue
-			return (mid, buf[:-1], new_start)
+			return (mid, buf[:-1])
 		else:
 			raise MTException("could not find message.")
 
@@ -396,11 +403,12 @@ class MTDevice(object):
 	def read_measurement(self, mode=None, settings=None):
 		# getting data
 		#data = self.read_data_msg()
-		mid, data, read_time = self.read_msg()
+		#mid = 0x32
+		mid, data = self.read_msg()
 		if mid==MID.MTData:
-			return self.parse_MTData(data, mode, settings), read_time
+			return self.parse_MTData(data, mode, settings)
 		elif mid==MID.MTData2:
-			return self.parse_MTData2(data), read_time
+			return self.parse_MTData2(data)
 		else:
 			raise MTException("unknown data message: mid=0x%02X (%s)."%	(mid, getMIDName(mid)))
 
@@ -498,6 +506,7 @@ class MTDevice(object):
 						struct.unpack('!'+4*ffmt, content)
 			else:
 				raise MTException("unknown packet: 0x%04X."%data_id)
+			
 			return o
 		def parse_GPS(data_id, content, ffmt):
 			o = {}
@@ -530,6 +539,52 @@ class MTDevice(object):
 			else:
 				raise MTException("unknown packet: 0x%04X."%data_id)
 			return o
+		#######################################################################################
+		def parse_PVT(data_id, content, ffmt):
+			o = {}
+			if (data_id&0x00F0) == 0x10:	# PVT Data
+				# o['itow']=struct.unpack('!L', content)
+				o['iTOW'],o['year'],o['month'],o['day'],o['hour'],o['min'],o['sec'],o['valid'],\
+				o['tAcc'],o['nano'],o['fixtype'],o['flags'],o['numSV'],o['Reserved1'],lon,\
+				lat,hgt,hmsl,hacc,vacc,o['VELN'],o['VELE'],o['VELD'],o['SPEED'],headmot,sacc,headacc,headveh,\
+				o['gdop'],o['pdop'],o['tdop'],o['vdop'],o['hdop'],o['ndop'],o['edop'] = struct.unpack('!LHBBBBBBLlBBBBllllLLlllllLLlHHHHHHH', content)
+				
+				o['LAT'] = lat
+				o['LON'] = lon
+				o['ALT'] = hgt
+				o['Hacc'] = hacc
+				o['Vacc'] = vacc
+
+				o['lon']=lon*0.0000001
+				o['lat']=lat*0.0000001
+				o['height']=hgt/1000
+
+				###########
+				o['cov_E'] = o['cov_N'] = (hacc*1e-3)*(hacc*1e-3)*0.5 
+				o['cov_D'] = (vacc*1e-3)*(vacc*1e-3);
+
+			# elif (data_id&0x00F0) == 0x20:	# PVT Data
+				# TO DO: Sat Info
+
+			else:
+				raise MTException("unknown packet: 0x%04X."%data_id)
+			
+			return o
+		############################################################################################
+				# print lon*0.0000001,lat*0.0000001
+			# # elif (data_id&0x00F0) == 0x20:	# SV Info
+			# # 	o['iTOW'], o['numCh'] = struct.unpack('!LBxx', content[:8])
+			# # 	channels = []
+			# # 	ch = {}
+			# # 	for i in range(o['numCh']):
+			# # 		ch['chn'], ch['svid'], ch['flags'], ch['quality'], \
+			# # 				ch['cno'], ch['elev'], ch['azim'], ch['prRes'] = \
+			# # 				struct.unpack('!BBBBBbhl', content[8+12*i:20+12*i])
+			# # 		channels.append(ch)
+			# # 	o['channels'] = channels
+			# else:
+			# 	raise MTException("unknown packet: 0x%04X."%data_id)
+		#######################################################################################
 		def parse_SCR(data_id, content, ffmt):
 			o = {}
 			if (data_id&0x00F0) == 0x10:	# ACC+GYR+MAG+Temperature
@@ -584,6 +639,7 @@ class MTDevice(object):
 		while data:
 			try:
 				data_id, size = struct.unpack('!HB', data[:3])
+				# print (data_id&0x0003)
 				if (data_id&0x0003) == 0x3:
 					float_format = 'd'
 				elif (data_id&0x0003) == 0x0:
@@ -591,8 +647,10 @@ class MTDevice(object):
 				else:
 					raise MTException("fixed point precision not supported.")
 				content = data[3:3+size]
-				data = data[3+size]
+				data = data[3+size:]
 				group = data_id&0xFF00
+
+
 				ffmt = float_format
 				if group == XDIGroup.Temperature:
 					output['Temperature'] = parse_temperature(data_id, content, ffmt)
@@ -620,6 +678,8 @@ class MTDevice(object):
 					output['Velocity'] = parse_velocity(data_id, content, ffmt)
 				elif group == XDIGroup.Status:
 					output['Status'] = parse_status(data_id, content, ffmt)
+				elif group == XDIGroup.PVT:
+					output['PVT'] = parse_PVT(data_id, content, ffmt)
 				else:
 					raise MTException("unknown XDI group: 0x%04X."%group)
 			except struct.error, e:
