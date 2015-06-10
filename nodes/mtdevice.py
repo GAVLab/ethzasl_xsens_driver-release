@@ -16,7 +16,7 @@ verbose = False
 class MTDevice(object):
 	"""XSens MT device communication object."""
 
-	def __init__(self, port, baudrate=115200, timeout=0.01, autoconf=False,
+	def __init__(self, port, baudrate=115200, timeout=0.01, autoconf=True,
 			config_mode=False):
 		"""Open device."""
 		## serial interface to the device
@@ -38,13 +38,17 @@ class MTDevice(object):
 			print self.header
 		else:
 			## mode parameter of the IMU
-			self.mode = 2055
+			# self.mode = 2055
+			self.mode = None
 			## settings parameter of the IMU
-			self.settings = 1
+			# self.settings = 1
+			self.settings = None
 			## length of the MTData message
-			self.length = 59
+			# self.length = 59
+			self.length = None
 			## header of the MTData message
-			self.header = '\xFA\xFF\x32'+chr(self.length)
+			# self.header = '\xFA\xFF\x32'+chr(self.length)
+			self.header = None
 		if config_mode:
 			self.GoToConfig()
 
