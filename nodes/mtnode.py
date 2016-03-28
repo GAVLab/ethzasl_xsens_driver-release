@@ -159,6 +159,7 @@ class XSensDriver(object):
 		orientation_data = data.get('Orientation Data')
 		mag_data = data.get('Magnetic')
 		press_data = data.get('Pressure')
+		# scr_data = data.get('SCR')
 
 		####################################################################################################
 
@@ -344,7 +345,7 @@ class XSensDriver(object):
 				# STATUS
 				xgps_msg.status.satellites_used = pvt_data['numSV']
 				
-				print 'numSV:',pvt_data['numSV'],'speed:',speed,'Course:',degrees(xgps_msg.track),'var_n:',xgps_msg.position_covariance[0],'var_e:',xgps_msg.position_covariance[4],'var_d:',xgps_msg.position_covariance[8]
+				# print 'numSV:',pvt_data['numSV'],'speed:',speed,'Course:',degrees(xgps_msg.track),'var_n:',xgps_msg.position_covariance[0],'var_e:',xgps_msg.position_covariance[4],'var_d:',xgps_msg.position_covariance[8]
 
 				pub_gps = True
 			except KeyError:

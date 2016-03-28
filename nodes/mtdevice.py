@@ -673,7 +673,8 @@ class MTDevice(object):
 				elif group == XDIGroup.GPS:
 					output['GPS'] = parse_GPS(data_id, content, ffmt)
 				elif group == XDIGroup.SensorComponentReadout:
-					output['SCR'] = parse_SCR(data_id, content, ffmt)
+					if (data_id&0x00F0) == 0x10:
+						output['SCR'] = parse_SCR(data_id, content, ffmt)
 				elif group == XDIGroup.AnalogIn:
 					output['Analog In'] = parse_analog_in(data_id, content, ffmt)
 				elif group == XDIGroup.Magnetic:
