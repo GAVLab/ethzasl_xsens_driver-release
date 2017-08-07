@@ -160,11 +160,7 @@ class XSensDriver(object):
 		orientation_data = data.get('Orientation Data')
 		mag_data = data.get('Magnetic')
 		press_data = data.get('Pressure')
-		stamp_data = data.get('Timestamp')
-
-		print stamp_data
-		# scr_data = data.get('SCR')
-
+		time_data = data.get('Timestamp')
 		####################################################################################################
 
 		# create messages and default values
@@ -185,6 +181,8 @@ class XSensDriver(object):
 		###################################################################################################
 		press_msg = FluidPressure()
 		pub_press = False
+		time_msg = TimeReference()
+		pub_time = False
 		###################################################################################################
 
 		# fill information where it's due
@@ -392,6 +390,22 @@ class XSensDriver(object):
 				pub_press = True
 			except KeyError:
 				pass
+		if time_data:
+			try:
+				flags = time_data['Flags']
+				if (flags>0):
+					hour = time_data['Hour']
+					minute = time_data['Minute']
+					second = time_data['Second']
+					nsecs = time_data['ns']
+					secs = hour*60*60 + minute*60 + second
+					time_msg.time_ref.secs = secs
+					time_msg.time_ref.nsecs = nsecs
+					time_msg.source = "Time of day"
+					pub_time = True
+			except KeyError:
+				pass
+				
 
 		##########################################################################################################
 		if imu_data:
@@ -523,6 +537,9 @@ class XSensDriver(object):
 		if pub_press:
 			press_msg.header = h
 			self.press_pub.publish(press_msg)
+		if pub_time:
+			time_msg.header = h
+			self.time_pub.publish(time_msg)
 		############################################################################################
 
 
